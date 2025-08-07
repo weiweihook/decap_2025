@@ -1,3 +1,3 @@
 "Run"
 
-$ python main_vec.py --case-idx=4 --num_envs=4
+$ python main_vec.py --case-idx=4 --num-envs=4
