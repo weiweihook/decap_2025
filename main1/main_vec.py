@@ -11,7 +11,6 @@ import os
 import logging
 
 torch.set_num_threads(1)
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 
 if __name__ == '__main__':
     args = get_args()
@@ -25,6 +24,7 @@ if __name__ == '__main__':
 
     # GPU
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    os.environ["CUDA_VISIBLE_DEVICES"] = str(args.GPU)
 
     # logging
     logger = logging.getLogger()

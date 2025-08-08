@@ -17,7 +17,9 @@ def get_args():
     parser.add_argument("--torch-deterministic", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="if toggled, `torch.backends.cudnn.deterministic=False`")
     parser.add_argument("--cuda", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="if toggled, cuda will be enabled by default")
+        help="cuda or cpu")
+    parser.add_argument("--GPU", type=int, default=0, 
+        help="GPU number")
 
     # Algorithm specific arguments
     parser.add_argument("--num-steps", type=int, default=128,
