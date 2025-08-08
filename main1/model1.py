@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 from torch.distributions.categorical import Categorical
-import os
+from typing import Optional, Tuple
 
 
 
@@ -148,7 +148,7 @@ class PPONetwork(nn.Module):
                  dropout_rate: float = 0.0):
         super().__init__()
         
-        self.action_space = env.action_space
+        self.action_space = env.ACTION_SPACE
         self.input_channels = input_channels
         self.use_batch_norm = use_batch_norm
         
@@ -164,7 +164,7 @@ class PPONetwork(nn.Module):
         self.encoder = Encoder(input_channels + 2, use_batch_norm)
         
         # Actor网络（策略网络）
-        self.actor = Decoder(len(env.action_meaning), use_batch_norm)
+        self.actor = Decoder(len(env.ACTION_MEANINGS), use_batch_norm)
         
         # Critic网络（价值网络)
         self.critic = nn.Sequential(
@@ -200,26 +200,68 @@ class PPONetwork(nn.Module):
         
         return encoded_features
 
-    def get_value(self, x, imped):
-        i = self.imped_fc(imped).reshape(imped.shape[0], 2, 11, 11)
-        xi = torch.cat((x, i), dim=1)
-        x0 = self.encoder(xi)
+    def get_value(self, x: torch.Tensor, imped: torch.Tensor) -> torch.Tensor:
+        """
+        获取状态价值
+        
+        Args:
+            x: 状态特征 [batch, channels, height, width]
+            imped: 阻抗特征 [batch, 4*231]
+            
+        Returns:
+            状态价值 [batch, 1]
+        """
+        encoded_features = self._encode_features(x, imped)
+        return self.critic(encoded_features)
 
-        return self.critic(x0)
-
-    def get_action_and_value(self, x, imped, action_mask, action=None):
-        i = self.imped_fc(imped).reshape(imped.shape[0], 2, 11, 11)
-        xi = torch.cat((x, i), dim=1)
-        x0 = self.encoder(xi)
-        logits = self.actor(x0).reshape(x0.shape[0], -1)
+    def get_action_and_value(self, 
+                           x: torch.Tensor, 
+                           imped: torch.Tensor, 
+                           action_mask: torch.Tensor, 
+                           action: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        获取动作和价值
+        
+        Args:
+            x: 状态特征
+            imped: 阻抗特征
+            action_mask: 动作掩码
+            action: 可选的指定动作
+            
+        Returns:
+            (动作, 对数概率, 熵, 价值)
+        """
+        # 编码特征
+        encoded_features = self._encode_features(x, imped)
+        
+        # 获取动作logits
+        logits = self.actor(encoded_features)
+        logits = logits.reshape(encoded_features.shape[0], -1)
+        
+        # 分割logits和掩码
         split_logits = torch.split(logits, self.action_space.tolist(), dim=1)
         split_action_masks = torch.split(action_mask, self.action_space.tolist(), dim=1)
+        
+        # 创建掩码分类分布
         multi_categoricals = [
-            CategoricalMasked(logits=logits, masks=iam) for (logits, iam) in zip(split_logits, split_action_masks)
+            CategoricalMasked(logits=logits_i, masks=mask_i) 
+            for logits_i, mask_i in zip(split_logits, split_action_masks)
         ]
+        
+        # 采样或使用指定动作
         if action is None:
             action = torch.stack([categorical.sample() for categorical in multi_categoricals])
-        logprob = torch.stack([categorical.log_prob(a) for a, categorical in zip(action, multi_categoricals)])
+        
+        # 计算对数概率和熵
+        logprob = torch.stack([
+            categorical.log_prob(a) 
+            for a, categorical in zip(action, multi_categoricals)
+        ])
         entropy = torch.stack([categorical.entropy() for categorical in multi_categoricals])
-        return action.T, logprob.sum(0), entropy.sum(0), self.critic(x0)
+        
+        # 获取价值
+        value = self.critic(encoded_features)
+        
+        return action.T, logprob.sum(0), entropy.sum(0), value
+    
 

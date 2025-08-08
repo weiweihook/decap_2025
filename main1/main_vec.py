@@ -1,14 +1,17 @@
+import os
 import random
 import time
-from arguments import get_args
-from storage import RolloutStorage
+import logging
+from typing import List, Tuple
+
 import numpy as np
 import torch
+
+from arguments import get_args
+from storage import RolloutStorage
 import model1 as model
 from env import DecapPlaceParallel
 from ppo import PPO
-import os
-import logging
 
 torch.set_num_threads(1)
 
@@ -52,16 +55,16 @@ if __name__ == '__main__':
     agent = PPO(actor_critic, args)
     logging.info("===========================================")
     logging.info("Environment: {}, Parallel Number: {}" .format(args.case_idx, args.num_envs))
-    logging.info(f'Using GPU: {device}')
+    logging.info(f'Using GPU: {device}, {args.GPU}')
     logging.info("================ Training =================")
 
 
     # ALGO Logic: Storage setup
     rollouts = RolloutStorage(args.num_steps,
                               args.num_envs,
-                              vec_env.single_observation_space_shape,
-                              vec_env.action_space_shape,
-                              vec_env.action_space)
+                              vec_env.SINGLE_OBSERVATION_SPACE_SHAPE,
+                              vec_env.ACTION_SPACE_SHAPE,
+                              vec_env.ACTION_SPACE)
     rollouts.to(device)
 
     loss = np.zeros(num_updates)
@@ -114,16 +117,16 @@ if __name__ == '__main__':
             for idx in range(vec_env.env_count):
                 if info["reward_now"][idx] > 0 or sum(vec_action_mask[idx]) == 0:
                     next_done[idx] = True
-                    vec_reward[idx] = info["reward_now"][idx]
                     obs_done, imped_done = vec_env.reset_idx(idx)
                     next_obs[idx], next_imped[idx] = torch.Tensor(obs_done), torch.Tensor(imped_done)
-                    indices = (rollouts.dones[:step-1][idx]==1).nonzero(as_tuple=True)[0]
-                    last_step = indices[-1].item() if indices.numel() > 0 else step-1
-                    rollouts.rewards[:last_step, :] += info["reward_now"][idx]
+                    # vec_reward[idx] = info["reward_now"][idx]
+                    # indices = (rollouts.dones[:step-1][idx]==1).nonzero(as_tuple=True)[0]
+                    # last_step = indices[-1].item() if indices.numel() > 0 else step-1
+                    # rollouts.rewards[:last_step, :] += info["reward_now"][idx]
 
             vec_action_mask = torch.Tensor(np.stack(vec_env.vec_action_mask())).to(device)
 
-            rollouts.insert(step, next_obs, next_imped, vec_action.reshape([-1, vec_env.action_space_shape[0]]),
+            rollouts.insert(step, next_obs, next_imped, vec_action.reshape([-1, vec_env.ACTION_SPACE_SHAPE[0]]),
                             vec_logprob, torch.tensor(vec_reward).view(-1),next_done, vec_value.flatten(),
                             vec_action_mask)
 
@@ -135,8 +138,8 @@ if __name__ == '__main__':
 
         v_loss[update - 1], pg_loss[update - 1], entropy_loss[update - 1], loss[update - 1] = agent.update(rollouts,
                                                                                                            args.num_steps,
-                                                                                                           vec_env.single_observation_space_shape,
-                                                                                                           vec_env.action_space_shape)
+                                                                                                           vec_env.SINGLE_OBSERVATION_SPACE_SHAPE,
+                                                                                                           vec_env.ACTION_SPACE_SHAPE)
         rewards[update - 1] = rollouts.rewards.cpu().numpy().reshape(-1)
 
         logging.info(f"-------------------- Update {update} --------------------")

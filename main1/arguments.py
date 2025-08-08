@@ -1,10 +1,12 @@
 import argparse
 from distutils.util import strtobool
+from typing import Any
+
 import torch
 
-def get_args():
-
-    parser = argparse.ArgumentParser()
+def get_args() -> Any:
+    """Parse command line arguments for PPO training."""
+    parser = argparse.ArgumentParser(description="PPO Training Arguments")
 
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
@@ -61,9 +63,9 @@ def get_args():
 
     return args
 
-def get_test_args():
-
-    parser = argparse.ArgumentParser()
+def get_test_args() -> Any:
+    """Parse command line arguments for testing."""
+    parser = argparse.ArgumentParser(description="PPO Testing Arguments")
 
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
