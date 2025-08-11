@@ -21,7 +21,7 @@ KNEE_FREQUENCY = 3.5e9
 TARGET_IMPEDANCE_BASE = 0.035
 MOS_CAP_SCALING = 0.25
 ESR_SCALING = 200
-COST_PENALTY = -100
+COST_PENALTY = -1
 
 # File configurations
 EXECUTE_FILES = ['interposer_ac_novss1.sp', 'interposer_ac_novss2.sp', 
