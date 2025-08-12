@@ -19,6 +19,7 @@ class PPO():
         self.target_kl = args.target_kl
 
         self.optimizer = optim.Adam(self.actor_critic.parameters(), lr=args.learning_rate, eps=1e-5)
+        self.lr_scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, args.anneal_lr_value)
 
     def update(self, rollouts, num_steps, obs_shape, action_shape):
 
@@ -86,6 +87,7 @@ class PPO():
                 loss.backward()
                 nn.utils.clip_grad_norm_(self.actor_critic.parameters(), self.max_grad_norm)
                 self.optimizer.step()
+                self.lr_scheduler.step()
 
                 v_loss_epoch += v_loss.item()
                 pg_loss_epoch += pg_loss.item()

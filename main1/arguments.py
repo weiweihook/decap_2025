@@ -10,6 +10,8 @@ def get_args() -> Any:
 
     parser.add_argument("--learning-rate", type=float, default=2.5e-4,
         help="the learning rate of the optimizer")
+    parser.add_argument("--anneal-lr-value", type=float, default=0.9997,
+        help="Toggle learning rate annealing for policy and value networks")
     parser.add_argument("--seed", type=int, default=1,
         help="seed of the experiment")
     parser.add_argument("--total-timesteps", type=int, default=5000000,
@@ -30,8 +32,6 @@ def get_args() -> Any:
         help="the idx of parallel environments")
     parser.add_argument("--num-envs", type=int, default=4,
                         help="the number of parallel environments")
-    parser.add_argument("--anneal-lr", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
-        help="Toggle learning rate annealing for policy and value networks")
     parser.add_argument("--gae", type=lambda x: bool(strtobool(x)), default=True, nargs="?", const=True,
         help="Use GAE for advantage computation")
     parser.add_argument("--gamma", type=float, default=0.99,

@@ -83,10 +83,6 @@ if __name__ == '__main__':
         rollouts.obs[0].copy_(next_obs)
         rollouts.imped[0].copy_(next_imped)
         rollouts.action_masks[0].copy_(vec_action_mask)
-        if args.anneal_lr:
-            frac = 0.9997**(update-1)
-            lrnow = frac * args.learning_rate
-            agent.optimizer.param_groups[0]["lr"] = lrnow
 
         for step in range(0, args.num_steps):
 
