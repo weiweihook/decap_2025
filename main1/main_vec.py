@@ -84,7 +84,7 @@ if __name__ == '__main__':
         rollouts.imped[0].copy_(next_imped)
         rollouts.action_masks[0].copy_(vec_action_mask)
         if args.anneal_lr:
-            frac = 1.0 - (update - 1.0) / num_updates
+            frac = 0.9997**(update-1)
             lrnow = frac * args.learning_rate
             agent.optimizer.param_groups[0]["lr"] = lrnow
 
@@ -115,6 +115,8 @@ if __name__ == '__main__':
             # When the target impedance is satisfied or there is no valid positions, Done is True
             # The final reward is propagated to the before states.
             for idx in range(vec_env.env_count):
+                if vec_reward[idx] < info["his_reward"][idx]:
+                    vec_reward[idx] -= 0.1
                 if info["reward_now"][idx] > 0 or sum(vec_action_mask[idx]) == 0:
                     next_done[idx] = True
                     obs_done, imped_done = vec_env.reset_idx(idx)

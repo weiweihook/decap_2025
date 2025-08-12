@@ -68,7 +68,7 @@ class Encoder(nn.Module):
         self.bn4 = nn.BatchNorm2d(256) if use_batch_norm else nn.Identity()
         
         # 使用更稳定的激活函数
-        self.activation = nn.ReLU(inplace=True)
+        self.activation = nn.ReLU(inplace=False)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播"""
@@ -116,7 +116,7 @@ class Decoder(nn.Module):
         self.transpose = Transpose((0, 2, 3, 1))  # NCHW -> NHWC
         
         # 激活函数
-        self.activation = nn.ReLU(inplace=True)
+        self.activation = nn.ReLU(inplace=False)
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播"""
@@ -144,7 +144,7 @@ class PPONetwork(nn.Module):
     def __init__(self, 
                  env, 
                  input_channels: int = 5, 
-                 use_batch_norm: bool = True,
+                 use_batch_norm: bool = False,
                  dropout_rate: float = 0.0):
         super().__init__()
         
@@ -155,7 +155,7 @@ class PPONetwork(nn.Module):
         # 阻抗处理网络（添加dropout以防止过拟合）
         self.imped_fc = nn.Sequential(
             layer_init(nn.Linear(4 * 231, 512), std=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             layer_init(nn.Linear(512, 2 * 121), std=1)
         )
@@ -170,10 +170,10 @@ class PPONetwork(nn.Module):
         self.critic = nn.Sequential(
             nn.Flatten(),
             layer_init(nn.Linear(256 * 2 * 2, 512), std=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             layer_init(nn.Linear(512, 256), std=1),
-            nn.ReLU(inplace=True),
+            nn.ReLU(inplace=False),
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             layer_init(nn.Linear(256, 1), std=1),
         )

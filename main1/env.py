@@ -276,8 +276,11 @@ class DecapPlaceParallel(gym.Env):
 
         info = {
             "reward_now": cost_negative, 
-            "reward_increment": reward_increment
+            "reward_increment": reward_increment,
+            "his_reward": self.vec_his_reward,
         }
+        
+        self.vec_his_reward = cost_negative
 
         return np.stack(state), np.stack(total_imped), cost_negative, self.vec_dones, info
 
