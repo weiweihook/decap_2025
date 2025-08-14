@@ -92,11 +92,6 @@ class Decoder(nn.Module):
         super().__init__()
         
         self.use_batch_norm = use_batch_norm
-
-        self.fc = nn.Sequential(
-            nn.Linear(2 * 2 * 256 + 32, 2 * 2 * 256), # +32 dimensions for impedance embedding
-            nn.ReLU(),
-        )
         
         # 上采样层1: 2x2 -> 4x4
         self.deconv1 = layer_init(nn.ConvTranspose2d(256, 256, kernel_size=3, stride=2, padding=1, output_padding=1))
@@ -123,13 +118,9 @@ class Decoder(nn.Module):
         # 激活函数
         self.activation = nn.ReLU(inplace=False)
     
-    def forward(self, x: torch.Tensor, imped: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         """前向传播"""
         # 上采样序列
-        flattened = torch.reshape(x, [-1, 2 * 2 * 256])
-        feature_with_imped = torch.cat([flattened, imped], dim=-1)
-        x = self.fc(feature_with_imped)
-        x = torch.reshape(x, [-1, 256, 2, 2])
         x = self.activation(self.bn1(self.deconv1(x)))  # 2x2 -> 4x4
         x = self.activation(self.bn2(self.deconv2(x)))  # 4x4 -> 8x8
         x = self.activation(self.bn3(self.deconv3(x)))  # 8x8 -> 11x11
@@ -161,22 +152,24 @@ class PPONetwork(nn.Module):
         self.input_channels = input_channels
         self.use_batch_norm = use_batch_norm
         
-        # 阻抗处理网络
-        self.imped_embedding = nn.Sequential(
+        # 阻抗处理网络（添加dropout以防止过拟合）
+        self.imped_fc = nn.Sequential(
             layer_init(nn.Linear(4 * 231, 512), std=1),
-            nn.ReLU(),
-            layer_init(nn.Linear(512, 32), std=1)  # 32维嵌入
+            nn.ReLU(inplace=False),
+            nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
+            layer_init(nn.Linear(512, 2 * 121), std=1)
         )
         
-        # 编码器
-        self.encoder = Encoder(input_channels, use_batch_norm)
+        # 编码器（输入通道数包括原始输入和阻抗特征）
+        self.encoder = Encoder(input_channels + 2, use_batch_norm)
         
         # Actor网络（策略网络）
         self.actor = Decoder(len(env.ACTION_MEANINGS), use_batch_norm)
         
         # Critic网络（价值网络)
         self.critic = nn.Sequential(
-            layer_init(nn.Linear(256 * 2 * 2 + 32, 512), std=1),
+            nn.Flatten(),
+            layer_init(nn.Linear(256 * 2 * 2, 512), std=1),
             nn.ReLU(inplace=False),
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             layer_init(nn.Linear(512, 256), std=1),
@@ -184,6 +177,28 @@ class PPONetwork(nn.Module):
             nn.Dropout(dropout_rate) if dropout_rate > 0 else nn.Identity(),
             layer_init(nn.Linear(256, 1), std=1),
         )
+    
+    def _process_impedance(self, imped: torch.Tensor) -> torch.Tensor:
+        """处理阻抗输入"""
+        batch_size = imped.shape[0]
+        processed = self.imped_fc(imped)
+        return processed.reshape(batch_size, 2, 11, 11)
+
+
+    def _encode_features(self, x: torch.Tensor, imped: torch.Tensor) -> torch.Tensor:
+        """
+            编码特征
+        """
+        # 处理阻抗特征
+        imped_features = self._process_impedance(imped)
+        
+        # 拼接输入特征
+        combined_input = torch.cat((x, imped_features), dim=1)
+        
+        # 编码
+        encoded_features = self.encoder(combined_input)
+        
+        return encoded_features
 
     def get_value(self, x: torch.Tensor, imped: torch.Tensor) -> torch.Tensor:
         """
@@ -196,10 +211,8 @@ class PPONetwork(nn.Module):
         Returns:
             状态价值 [batch, 1]
         """
-        encoded_features = self.encoder(x)
-        imped_features = self.imped_embedding(imped)
-        feature_with_imped = torch.cat([encoded_features.reshape(-1, 2 * 2 * 256), imped_features], dim=-1)
-        return self.critic(feature_with_imped)
+        encoded_features = self._encode_features(x, imped)
+        return self.critic(encoded_features)
 
     def get_action_and_value(self, 
                            x: torch.Tensor, 
@@ -218,14 +231,12 @@ class PPONetwork(nn.Module):
         Returns:
             (动作, 对数概率, 熵, 价值)
         """
-        
         # 编码特征
-        encoded_features = self.encoder(x)
-        # 阻抗特征
-        imped_features = self.imped_embedding(imped)
+        encoded_features = self._encode_features(x, imped)
+        
         # 获取动作logits
-        logits = self.actor(encoded_features, imped_features)
-        logits = logits.reshape(x.shape[0], -1)
+        logits = self.actor(encoded_features)
+        logits = logits.reshape(encoded_features.shape[0], -1)
         
         # 分割logits和掩码
         split_logits = torch.split(logits, self.action_space.tolist(), dim=1)
@@ -249,8 +260,7 @@ class PPONetwork(nn.Module):
         entropy = torch.stack([categorical.entropy() for categorical in multi_categoricals])
         
         # 获取价值
-        feature_with_imped = torch.cat([encoded_features.reshape(-1, 2 * 2 * 256), imped_features], dim=-1)
-        value = self.critic(feature_with_imped)
+        value = self.critic(encoded_features)
         
         return action.T, logprob.sum(0), entropy.sum(0), value
     
